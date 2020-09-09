@@ -29,19 +29,17 @@ knitr::opts_chunk$set(
 
 ## Introduction
 
-Placekickers are an under-appreciated portion of a football team. They receive plenty of criticism when important field goals are missed, and receive only a slight amount of praise when a big kick is made. A weak kicking game can be especially costly in close games and can turn wins into losses. By quantifying kicker performance, teams can try to prevent the kicker from being the reason for losing tight close games.  
+Placekickers are often an underappreciated portion of a football team. They receive plenty of criticism when important field goals are missed, and receive only a slight amount of praise when a big kick is made. A weak kicking game can be especially costly in close games and can turn wins into losses. By quantifying kicker performance, teams can try to prevent the kicker from being the reason for losing games that come down to a key field goal. 
 
-Field Goal Percentage is a common metric to measure kicker performance, but it does not sufficiently account for varying level of difficulty for each attempt. For example, a 19 yard attempt in clear skies with no wind is much easier to make than a 50 yard attempt in the snow. To better account for the difficulty of each field goal attempt, I created an expected field goal model. This logistic regression model was developed using nflfastR's play-by-play data from the 2009-2019 NFL seasons and determines the probability of a field goal being made, given the values of certain input variables. This expected field goal (xFG) metric is useful in measuring an individual kicker's field goal performance, and could potentially be used to help coaches decide if their kicker has a strong probability of making a certain field goal attempt.
+Field Goal Percentage is a common metric used to measure kicker performance, but it does not sufficiently account for varying levels of difficulty for each attempt. For example, a 19 yard attempt made in clear skies with no wind is much easier to make than a 50 yard attempt in the snow. To better account for the specific difficulty of each field goal attempt, I created an expected field goal model. This logistic regression model was developed using nflfastR's play-by-play data from the 2009-2019 NFL seasons and determines the probability of a field goal being made, given the values of certain input variables. This expected field goal (xFG) metric is useful in measuring an individual kicker's field goal performance, and could potentially be used to help coaches decide if their kicker has a strong probability of making a certain field goal attempt by factoring in a variety of conditions.
 
 ## Reading and Cleaning the Data
 
-This analysis was developed using nflfastR's play-by-play data from the 2009 through 2019 NFL seasons. While much of the data cleaning and analysis was performed using the tidyverse set of packages, the caret package was also useful in quantifying the performance of the logistic regression expected field goal model.
+After reading in the play-by-play data, I created calculated columns as potential variables for the regression model. These calculated columns account for many attributes that may impact the result of a field goal attempt: indoors/outdoors, natural grass/artificial turf, precipitation, etc. Most of these fields contain binary Yes/No values, but "wind" and "temp" are continuous variables.
 
-After reading in the play-by-play data, I created calculated columns as potential variables for the regression model. These calculated columns account for many attributes that may impact the result of a field goal attempt: indoors/outdoors, natural grass / artificial turf, precipitation, etc. Most of these fields contain binary Yes/No values, but "wind" and "temp" are continuous variables.
+One issue I experienced was missing values for nflfastR's "weather", "temp", and "wind" fields. Many of the missing values were a result of dome or closed roof stadiums, so those values were manually imputed with "No" for precipitation, 0 for wind, and 70 for temp. For missing values in outdoor stadiums, the impute.mean function replaced any missing values with the average value for that variable.
 
-One issue I ran into was missing values for nflfastR's "weather", "temp", and "wind" fields. Many of the missing values were a result of dome or closed roof stadiums, so those values were manually imputed with "No" for precipitation, 0 for wind, and 70 for temp. For missing values in outdoor stadiums, the impute.mean function replaced any missing values with the average value for that variable.
-
-```{r}
+```{r, echo=TRUE, include=TRUE}
 library(nflfastR)
 library(tidyverse)
 library(caret)
@@ -98,7 +96,7 @@ fg_data <- pbp %>% filter(play_type == 'field_goal', field_goal_result != "block
 
 I created a series of line charts and scatter plots to take a look at which independent variables might have an impact on Field Goal Percentage (number of made kicks divided by all attempts). The line charts take a look at the impact of each categorical variable (combined with distance) on field goal percentage, while the scatter plots focus on continuous variables like wind and temperature. 
 
-```{r, layout="l-page", fig.height=X.Y}
+```{r, layout="l-page", fig.height=4.5}
 # Line charts of field goal rate by distance - split by categorical variables
 fg_data %>% 
   select(kick_distance,field_goal_result, div_game, TieorTakeLead:Precip) %>% 
@@ -115,7 +113,7 @@ fg_data %>%
   facet_wrap(~metric)
 ```
 
-```{r, layout="l-page", fig.height=X.Y}
+```{r, layout="l-page", fig.height=4.5}
 # Scatter plots of field goal result by distance and wind/temp  - split by continuous variables
 fg_data %>% 
   ggplot(aes(x=kick_distance, y= wind, group = field_goal_result, color = field_goal_result)) +
@@ -124,7 +122,7 @@ fg_data %>%
   theme(legend.position = "top") + coord_flip()
 ```
 
-```{r, layout="l-page", fig.height=X.Y}
+```{r, layout="l-page", fig.height=4.5}
 # Scatter plots of field goal result by distance and wind/temp  - split by continuous variables
 fg_data %>%
   ggplot(aes(x=kick_distance, y= temp, group = field_goal_result, color = field_goal_result)) +
@@ -173,9 +171,11 @@ pred_fg_data <- data.frame(fg_data, xFG)
 
 The xFG model was able to predict the field goal result with 86% accuracy. The model was much better at predicting if a field goal would be made (88%) than if the field goal would be missed (49%). For predictive purposes, this model does not provide a significant lift in accuracy over the 86% field goal percentage of our test sample. To improve on the predictive power of the xFG model, more detailed weather data could be pulled into the model to get the exact weather measurements at time of the field goal attempt.
 
+#xFG and FGOE
+
 However, the xFG metric can still be useful in identifying kickers that converted more (or less) field goal attempts than expected. The chart below shows the top 10 kickers in Field Goals Over Expected (FGOE) for the 2019 Season:
 
-```{r, layout="l-page", fig.height=X.Y, preview=TRUE}
+```{r, layout="l-page", preview=TRUE}
 # Field Goals over Expected Chart
 pred_fg_data %>% mutate(season = substr(game_id, 1, 4)) %>% 
   filter(season == 2019) %>% 
@@ -203,7 +203,8 @@ pred_fg_data %>% mutate(season = substr(game_id, 1, 4)) %>%
   cols_width(vars(posteam) ~ px(45))
 ```
 
-Unsurprisingly, All-Pro Justin Tucker led all kickers in FGOE during the 2019 season. Interestingly, Kai Forbath only kicked in 4 games in 2019, but performed well enough in those opportunities to rank 4th among kickers in FGOE.   
+Unsurprisingly, All-Pro Justin Tucker led all kickers in FGOE during the 2019 season. Interestingly, Kai Forbath only kicked in 4 games in 2019, but performed well enough in those opportunities to rank 4th among all kickers in FGOE.   
 
 ## Conclusion
+
 The xFG metric is a useful tool to measure kicker performance because it accounts for the difficulty of each kick, including factors for distance, weather, and game situation. A kicker's xFG can be compared to the actual number of field goals made to create FGOE. FGOE can help identify a kicker's impact by rewarding kickers that make difficult field goal attempts, and penalizing those that miss attempts with a high probability of being made.
